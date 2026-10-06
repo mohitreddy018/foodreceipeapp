@@ -18,7 +18,8 @@ const r = (
   rating,
   cookingTime,
   serving,
-  difficulty
+  difficulty,
+  dietaryPreference
 ) => ({
   name,
   category,

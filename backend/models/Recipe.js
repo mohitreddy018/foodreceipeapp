@@ -31,11 +31,16 @@ const recipeSchema = new mongoose.Schema({
     type: String
   },
 
+  dietaryPreference: {
+    type: String,
+    enum: ["Vegetarian", "Non-Vegetarian"],
+    default: "Vegetarian"
+  },
+
   ingredients: {
     type: [String]
   },
 
-  // Each cooking instruction is stored as a separate step
   instructions: {
     type: [String]
   },

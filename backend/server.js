@@ -16,9 +16,21 @@ mongoose
   .then(() => console.log("MongoDB connected successfully!"))
   .catch(error => console.error("MongoDB connection failed:", error));
 
+
+// ================================
+// HOME
+// ================================
+
 app.get("/", (req, res) => {
-  res.json({ message: "Food Recipe API is running!" });
+  res.json({
+    message: "Food Recipe API is running!"
+  });
 });
+
+
+// ================================
+// GET ALL RECIPES
+// ================================
 
 app.get("/api/recipes", async (req, res) => {
   try {
@@ -34,6 +46,11 @@ app.get("/api/recipes", async (req, res) => {
     });
   }
 });
+
+
+// ================================
+// GET ONE RECIPE
+// ================================
 
 app.get("/api/recipes/:id", async (req, res) => {
   try {
@@ -54,6 +71,74 @@ app.get("/api/recipes/:id", async (req, res) => {
   }
 });
 
-app.listen(PORT, () => {
+
+// ================================
+// ADD NEW RECIPE
+// ================================
+
+app.post("/api/recipes", async (req, res) => {
+  try {
+    const {
+      name,
+      image,
+      imageSource,
+      category,
+      cuisine,
+      area,
+      description,
+      ingredients,
+      instructions,
+      rating,
+      cookingTime,
+      serving,
+      difficulty
+    } = req.body;
+
+    if (!name || !category || !ingredients || !instructions) {
+      return res.status(400).json({
+        message:
+          "Name, category, ingredients and instructions are required."
+      });
+    }
+
+    const newRecipe = new Recipe({
+      name,
+      image: image || "",
+      imageSource: imageSource || "",
+      category,
+      cuisine: cuisine || "",
+      area: area || "",
+      description: description || "",
+      ingredients,
+      instructions,
+      rating: rating || 0,
+      cookingTime: cookingTime || 0,
+      serving: serving || 1,
+      difficulty: difficulty || "Medium"
+    });
+
+    const savedRecipe = await newRecipe.save();
+
+    res.status(201).json({
+      message: "Recipe added successfully!",
+      recipe: savedRecipe
+    });
+
+  } catch (error) {
+    console.error("Error adding recipe:", error);
+
+    res.status(500).json({
+      message: "Error adding recipe",
+      error: error.message
+    });
+  }
+});
+
+
+// ================================
+// START SERVER
+// ================================
+
+app.listen(PORT, "0.0.0.0", () => {
   console.log(`Backend running on http://localhost:${PORT}`);
 });

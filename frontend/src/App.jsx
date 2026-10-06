@@ -1,73 +1,71 @@
 import { useEffect, useMemo, useState } from "react";
 import "./App.css";
 import recipeImages from "./recipeImages";
+import RecipeRating from "./RecipeRating";
+import SubmitRecipe from "./SubmitRecipe";
 
-const API_URL = "http://localhost:5000/api/recipes";
+const API_URL = "http://10.124.27.38:5173/api/recipes";
 
-const categoryList = [
-  "All",
-  "South Indian",
-  "North Indian",
-  "Chinese",
+const categories = [
+  ["All", "🍽️"],
+  ["South Indian", "🥘"],
+  ["North Indian", "🍛"],
+  ["Chinese", "🍜"],
 ];
 
-function getRecipeId(recipe) {
-  return recipe._id || recipe.id || recipe.name;
-}
+const dietaryOptions = [
+  ["All", "🍽️"],
+  ["Vegetarian", "🥬"],
+  ["Non-Vegetarian", "🍗"],
+];
 
-function getIngredients(recipe) {
-  if (Array.isArray(recipe.ingredients)) {
-    return recipe.ingredients;
-  }
+const getId = recipe =>
+  recipe._id || recipe.id || recipe.name;
 
-  if (typeof recipe.ingredients === "string") {
-    return recipe.ingredients
-      .split(",")
-      .map((item) => item.trim())
-      .filter(Boolean);
-  }
+const ingredients = recipe =>
+  Array.isArray(recipe.ingredients)
+    ? recipe.ingredients
+    : typeof recipe.ingredients === "string"
+    ? recipe.ingredients
+        .split(",")
+        .map(item => item.trim())
+        .filter(Boolean)
+    : [];
 
-  return [];
-}
+const instructions = recipe => {
+  const list = Array.isArray(recipe.instructions)
+    ? recipe.instructions
+    : typeof recipe.instructions === "string"
+    ? recipe.instructions.split(/\n+/)
+    : [];
 
-function getInstructions(recipe) {
-  let instructions = [];
-
-  if (Array.isArray(recipe.instructions)) {
-    instructions = recipe.instructions;
-  } else if (typeof recipe.instructions === "string") {
-    instructions = recipe.instructions
-      .split(/\n+/)
-      .map((item) => item.trim())
-      .filter(Boolean);
-  }
-
-  return instructions
-    .map((item) =>
+  return list
+    .map(item =>
       String(item)
         .trim()
-        // Remove "Step 1:", "Step 2 -" etc.
         .replace(/^Step\s*\d+\s*[:.)-]\s*/i, "")
-        // Remove existing numbering such as "1.", "2)", "3 -"
         .replace(/^\d+\s*[\].):\-]\s*/, "")
         .trim()
     )
     .filter(Boolean);
-}
+};
 
 function RecipeImage({ recipe, className = "" }) {
-  const [imageError, setImageError] = useState(false);
+  const [error, setError] = useState(false);
 
-  const image = recipeImages[recipe.name];
+  const image =
+    recipeImages[recipe.name] || recipe.image || "";
 
   return (
-    <div className={`recipe-image-wrapper ${className}`}>
-      {image && !imageError ? (
+    <div
+      className={`recipe-image-wrapper ${className}`}
+    >
+      {image && !error ? (
         <img
           src={image}
           alt={recipe.name}
           className="recipe-image"
-          onError={() => setImageError(true)}
+          onError={() => setError(true)}
         />
       ) : (
         <div className="recipe-image-fallback">
@@ -81,61 +79,68 @@ function RecipeImage({ recipe, className = "" }) {
 
 function App() {
   const [recipes, setRecipes] = useState([]);
-  const [searchTerm, setSearchTerm] = useState("");
-  const [selectedCategory, setSelectedCategory] = useState("All");
-  const [selectedRecipe, setSelectedRecipe] = useState(null);
+  const [search, setSearch] = useState("");
+  const [category, setCategory] = useState("All");
+
+  const [dietaryPreference, setDietaryPreference] =
+    useState("All");
+
+  const [selected, setSelected] = useState(null);
   const [favorites, setFavorites] = useState([]);
-  const [activePage, setActivePage] = useState("home");
+  const [page, setPage] = useState("home");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [showSubmitRecipe, setShowSubmitRecipe] =
+    useState(false);
 
-  // Load recipes from backend
+  /* =====================================================
+     LOAD RECIPES
+  ===================================================== */
+
   useEffect(() => {
-    const fetchRecipes = async () => {
-      try {
-        setLoading(true);
-        setError("");
-
-        const response = await fetch(API_URL);
-
-        if (!response.ok) {
+    fetch(API_URL)
+      .then(res => {
+        if (!res.ok) {
           throw new Error("Failed to fetch recipes");
         }
 
-        const data = await response.json();
+        return res.json();
+      })
+      .then(data => {
+        setRecipes(
+          Array.isArray(data) ? data : []
+        );
+      })
+      .catch(err => {
+        console.error(err);
 
-        if (Array.isArray(data)) {
-          setRecipes(data);
-        } else {
-          setRecipes([]);
-        }
-      } catch (err) {
-        console.error("Error fetching recipes:", err);
         setError(
           "Unable to load recipes. Please make sure the backend server is running."
         );
-      } finally {
+      })
+      .finally(() => {
         setLoading(false);
-      }
-    };
-
-    fetchRecipes();
+      });
   }, []);
 
-  // Load favorites from localStorage
+  /* =====================================================
+     LOAD FAVORITES
+  ===================================================== */
+
   useEffect(() => {
     try {
-      const savedFavorites = localStorage.getItem("foodRecipeFavorites");
+      const saved = localStorage.getItem(
+        "foodRecipeFavorites"
+      );
 
-      if (savedFavorites) {
-        setFavorites(JSON.parse(savedFavorites));
+      if (saved) {
+        setFavorites(JSON.parse(saved));
       }
     } catch (err) {
-      console.error("Error loading favorites:", err);
+      console.error(err);
     }
   }, []);
 
-  // Save favorites to localStorage
   useEffect(() => {
     localStorage.setItem(
       "foodRecipeFavorites",
@@ -143,244 +148,364 @@ function App() {
     );
   }, [favorites]);
 
-  // Close modal using Escape key
+  /* =====================================================
+     MODAL CONTROLS
+  ===================================================== */
+
   useEffect(() => {
-    const handleEscape = (event) => {
+    const close = event => {
       if (event.key === "Escape") {
-        setSelectedRecipe(null);
+        setSelected(null);
       }
     };
 
-    document.addEventListener("keydown", handleEscape);
+    document.addEventListener("keydown", close);
 
     return () => {
-      document.removeEventListener("keydown", handleEscape);
+      document.removeEventListener("keydown", close);
     };
   }, []);
 
-  // Prevent background scrolling when recipe modal is open
   useEffect(() => {
-    if (selectedRecipe) {
-      document.body.style.overflow = "hidden";
-    } else {
-      document.body.style.overflow = "auto";
-    }
+    document.body.style.overflow = selected
+      ? "hidden"
+      : "auto";
 
     return () => {
       document.body.style.overflow = "auto";
     };
-  }, [selectedRecipe]);
+  }, [selected]);
 
-  const toggleFavorite = (recipe) => {
-    const id = getRecipeId(recipe);
+  /* =====================================================
+     NAVIGATION
+  ===================================================== */
 
-    setFavorites((currentFavorites) => {
-      if (currentFavorites.includes(id)) {
-        return currentFavorites.filter(
-          (favoriteId) => favoriteId !== id
-        );
-      }
-
-      return [...currentFavorites, id];
+  const scrollTo = id => {
+    document.getElementById(id)?.scrollIntoView({
+      behavior: "smooth",
+      block: "start",
     });
   };
 
-  const isFavorite = (recipe) => {
-    return favorites.includes(getRecipeId(recipe));
-  };
+  const navigate = pageName => {
+    setPage(pageName);
 
-  const openRecipe = (recipe) => {
-    setSelectedRecipe(recipe);
-  };
-
-  const closeRecipe = () => {
-    setSelectedRecipe(null);
-  };
-
-  const scrollToSection = (sectionId) => {
-    const element = document.getElementById(sectionId);
-
-    if (element) {
-      element.scrollIntoView({
-        behavior: "smooth",
-        block: "start",
-      });
-    }
-  };
-
-  const handleNavigation = (page) => {
-    setActivePage(page);
-
-    if (page === "home") {
+    if (pageName === "home") {
       window.scrollTo({
         top: 0,
         behavior: "smooth",
       });
+
       return;
     }
 
-    if (page === "recipes") {
-      setSelectedCategory("All");
+    if (
+      pageName === "recipes" ||
+      pageName === "favorites"
+    ) {
+      setCategory("All");
+      setDietaryPreference("All");
 
       setTimeout(() => {
-        scrollToSection("recipes-section");
+        scrollTo("recipes-section");
       }, 50);
-
-      return;
     }
 
-    if (page === "categories") {
-      setSelectedCategory("All");
+    if (pageName === "categories") {
+      setCategory("All");
+      setDietaryPreference("All");
 
       setTimeout(() => {
-        scrollToSection("categories-section");
-      }, 50);
-
-      return;
-    }
-
-    if (page === "favorites") {
-      setSelectedCategory("All");
-
-      setTimeout(() => {
-        scrollToSection("recipes-section");
+        scrollTo("categories-section");
       }, 50);
     }
   };
 
-  const filteredRecipes = useMemo(() => {
+  const chooseCategory = selectedCategory => {
+    setCategory(selectedCategory);
+    setPage("recipes");
+
+    setTimeout(() => {
+      scrollTo("recipes-section");
+    }, 50);
+  };
+
+  const chooseDietaryPreference = preference => {
+    setDietaryPreference(preference);
+    setPage("recipes");
+
+    setTimeout(() => {
+      scrollTo("recipes-section");
+    }, 50);
+  };
+
+  /* =====================================================
+     CLEAR FILTERS
+  ===================================================== */
+
+  const clearFilters = () => {
+    setCategory("All");
+    setDietaryPreference("All");
+  };
+
+  /* =====================================================
+     FAVORITES
+  ===================================================== */
+
+  const toggleFavorite = recipe => {
+    const id = getId(recipe);
+
+    setFavorites(oldFavorites =>
+      oldFavorites.includes(id)
+        ? oldFavorites.filter(item => item !== id)
+        : [...oldFavorites, id]
+    );
+  };
+
+  const isFavorite = recipe =>
+    favorites.includes(getId(recipe));
+
+  /* =====================================================
+     SHARE
+  ===================================================== */
+
+  const shareRecipe = async recipe => {
+    const text = `Check out this recipe: ${
+      recipe.name
+    }\n\n${recipe.description || ""}`;
+
+    try {
+      if (navigator.share) {
+        await navigator.share({
+          title: recipe.name,
+          text,
+          url: window.location.href,
+        });
+      } else {
+        await navigator.clipboard.writeText(
+          `${recipe.name}\n${
+            recipe.description || ""
+          }\n${window.location.href}`
+        );
+
+        alert("Recipe link copied to clipboard!");
+      }
+    } catch (err) {
+      if (err.name !== "AbortError") {
+        try {
+          await navigator.clipboard.writeText(
+            window.location.href
+          );
+
+          alert(
+            "Recipe link copied to clipboard!"
+          );
+        } catch {
+          alert("Unable to share this recipe.");
+        }
+      }
+    }
+  };
+
+  /* =====================================================
+     FILTER RECIPES
+  ===================================================== */
+
+  const filtered = useMemo(() => {
     let result = [...recipes];
 
-    // Favorites page
-    if (activePage === "favorites") {
-      result = result.filter((recipe) =>
-        favorites.includes(getRecipeId(recipe))
+    /* Favorites */
+
+    if (page === "favorites") {
+      result = result.filter(recipe =>
+        favorites.includes(getId(recipe))
       );
     }
 
-    // Category filter
-    if (selectedCategory !== "All") {
+    /* Category */
+
+    if (category !== "All") {
       result = result.filter(
-        (recipe) =>
+        recipe =>
           String(recipe.category || "").toLowerCase() ===
-          selectedCategory.toLowerCase()
+          category.toLowerCase()
       );
     }
 
-    // Search filter
-    const search = searchTerm.trim().toLowerCase();
+    /* Dietary preference */
 
-    if (search) {
-      result = result.filter((recipe) => {
-        const name = String(recipe.name || "").toLowerCase();
-        const category = String(recipe.category || "").toLowerCase();
-        const cuisine = String(recipe.cuisine || "").toLowerCase();
-        const area = String(recipe.area || "").toLowerCase();
-        const description = String(
-          recipe.description || ""
-        ).toLowerCase();
+    if (dietaryPreference !== "All") {
+      result = result.filter(
+        recipe =>
+          String(
+            recipe.dietaryPreference || ""
+          ).toLowerCase() ===
+          dietaryPreference.toLowerCase()
+      );
+    }
 
-        const ingredients = getIngredients(recipe)
+    /* Search */
+
+    const query = search.trim().toLowerCase();
+
+    if (query) {
+      result = result.filter(recipe => {
+        const searchableText = [
+          recipe.name,
+          recipe.category,
+          recipe.cuisine,
+          recipe.area,
+          recipe.description,
+          recipe.dietaryPreference,
+          ...ingredients(recipe),
+        ]
+          .filter(Boolean)
           .join(" ")
           .toLowerCase();
 
-        return (
-          name.includes(search) ||
-          category.includes(search) ||
-          cuisine.includes(search) ||
-          area.includes(search) ||
-          description.includes(search) ||
-          ingredients.includes(search)
-        );
+        return searchableText.includes(query);
       });
     }
 
     return result;
   }, [
     recipes,
-    searchTerm,
-    selectedCategory,
-    activePage,
+    search,
+    category,
+    dietaryPreference,
+    page,
     favorites,
   ]);
 
-  const categoryCounts = useMemo(() => {
-    return {
-      "South Indian": recipes.filter(
-        (recipe) =>
-          String(recipe.category || "").toLowerCase() ===
-          "south indian"
-      ).length,
+  /* =====================================================
+     CATEGORY COUNTS
+  ===================================================== */
 
-      "North Indian": recipes.filter(
-        (recipe) =>
-          String(recipe.category || "").toLowerCase() ===
-          "north indian"
-      ).length,
+  const counts = useMemo(
+    () =>
+      Object.fromEntries(
+        categories.map(([name]) => [
+          name,
+          name === "All"
+            ? recipes.length
+            : recipes.filter(
+                recipe =>
+                  String(recipe.category || "")
+                    .toLowerCase() ===
+                  name.toLowerCase()
+              ).length,
+        ])
+      ),
+    [recipes]
+  );
 
-      Chinese: recipes.filter(
-        (recipe) =>
-          String(recipe.category || "").toLowerCase() ===
-          "chinese"
-      ).length,
-    };
-  }, [recipes]);
+  /* =====================================================
+     DIETARY COUNTS
+  ===================================================== */
+
+  const dietaryCounts = useMemo(
+    () =>
+      Object.fromEntries(
+        dietaryOptions.map(([option]) => [
+          option,
+          option === "All"
+            ? recipes.length
+            : recipes.filter(
+                recipe =>
+                  String(
+                    recipe.dietaryPreference || ""
+                  ).toLowerCase() ===
+                  option.toLowerCase()
+              ).length,
+        ])
+      ),
+    [recipes]
+  );
+
+  /* =====================================================
+     ACTIVE FILTER STATUS
+  ===================================================== */
+
+  const hasActiveFilters =
+    category !== "All" ||
+    dietaryPreference !== "All";
+
+  /* =====================================================
+     UI
+  ===================================================== */
 
   return (
     <div className="app">
-      {/* ================= NAVBAR ================= */}
+
+      {/* =================================================
+          NAVBAR
+      ================================================= */}
+
       <header className="navbar">
         <div className="navbar-container">
+
           <button
             className="brand"
-            onClick={() => handleNavigation("home")}
+            onClick={() => navigate("home")}
           >
-            <span className="brand-icon">🍴</span>
+            <span className="brand-icon">
+              🍴
+            </span>
+
             <span>Food Recipe</span>
           </button>
 
           <nav className="nav-links">
-            <button
-              className={activePage === "home" ? "active" : ""}
-              onClick={() => handleNavigation("home")}
-            >
-              Home
-            </button>
+
+            {[
+              ["home", "Home"],
+              ["recipes", "Recipes"],
+              ["categories", "Categories"],
+              ["favorites", "Favorites"],
+            ].map(([id, label]) => (
+              <button
+                key={id}
+                className={
+                  page === id ? "active" : ""
+                }
+                onClick={() => navigate(id)}
+              >
+                {label}
+
+                {id === "favorites" &&
+                  favorites.length > 0 && (
+                    <span className="favorite-count">
+                      {favorites.length}
+                    </span>
+                  )}
+              </button>
+            ))}
 
             <button
-              className={activePage === "recipes" ? "active" : ""}
-              onClick={() => handleNavigation("recipes")}
+              className="submit-nav-button"
+              onClick={() =>
+                setShowSubmitRecipe(true)
+              }
             >
-              Recipes
+              + Submit Recipe
             </button>
 
-            <button
-              className={activePage === "categories" ? "active" : ""}
-              onClick={() => handleNavigation("categories")}
-            >
-              Categories
-            </button>
-
-            <button
-              className={activePage === "favorites" ? "active" : ""}
-              onClick={() => handleNavigation("favorites")}
-            >
-              Favorites
-              {favorites.length > 0 && (
-                <span className="favorite-count">
-                  {favorites.length}
-                </span>
-              )}
-            </button>
           </nav>
+
         </div>
       </header>
 
-      {/* ================= HERO ================= */}
-      {activePage === "home" && (
+      {/* =================================================
+          HERO
+      ================================================= */}
+
+      {page === "home" && (
         <section className="hero">
+
           <div className="hero-content">
+
             <div className="hero-text">
+
               <span className="hero-badge">
                 🍳 Discover • Cook • Enjoy
               </span>
@@ -392,23 +517,28 @@ function App() {
               </h1>
 
               <p>
-                Discover delicious recipes from South India,
-                North India and Chinese cuisine. Find your
-                favorite dish and learn how to prepare it
+                Discover delicious recipes from
+                South India, North India and
+                Chinese cuisine. Find your favorite
+                dish and learn how to prepare it
                 step-by-step.
               </p>
 
               <button
                 className="hero-button"
-                onClick={() => handleNavigation("recipes")}
+                onClick={() =>
+                  navigate("recipes")
+                }
               >
                 Explore Recipes →
               </button>
+
             </div>
 
             <div className="hero-visual">
+
               <div className="hero-food-circle">
-                <span>🍛</span>
+                🍛
               </div>
 
               <div className="floating-food floating-one">
@@ -422,193 +552,377 @@ function App() {
               <div className="floating-food floating-three">
                 🥘
               </div>
+
             </div>
+
           </div>
+
         </section>
       )}
 
-      {/* ================= SEARCH ================= */}
+      {/* =================================================
+          SEARCH
+      ================================================= */}
+
       <section className="search-section">
+
         <div className="search-container">
+
           <div className="search-box">
-            <span className="search-icon">🔍</span>
+
+            <span className="search-icon">
+              🔍
+            </span>
 
             <input
-              type="text"
+              value={search}
               placeholder="Search recipes, ingredients or cuisine..."
-              value={searchTerm}
-              onChange={(event) =>
-                setSearchTerm(event.target.value)
+              onChange={event =>
+                setSearch(event.target.value)
               }
             />
 
-            {searchTerm && (
+            {search && (
               <button
                 className="clear-search"
-                onClick={() => setSearchTerm("")}
+                onClick={() => setSearch("")}
+                aria-label="Clear search"
               >
                 ✕
               </button>
             )}
+
           </div>
+
         </div>
+
       </section>
 
-      {/* ================= CATEGORIES ================= */}
+      {/* =================================================
+          CATEGORIES
+      ================================================= */}
+
       <section
         id="categories-section"
         className="categories-section"
       >
+
         <div className="section-container">
+
           <div className="section-heading">
+
             <div>
-              <span className="section-label">EXPLORE</span>
-              <h2>Browse by Category</h2>
+              <span className="section-label">
+                EXPLORE
+              </span>
+
+              <h2>
+                Browse by Category
+              </h2>
             </div>
+
           </div>
 
           <div className="category-buttons">
-            {categoryList.map((category) => {
-              const count =
-                category === "All"
-                  ? recipes.length
-                  : categoryCounts[category] || 0;
 
-              return (
+            {categories.map(
+              ([name, icon]) => (
                 <button
-                  key={category}
+                  key={name}
                   className={`category-button ${
-                    selectedCategory === category
+                    category === name
                       ? "selected"
                       : ""
                   }`}
-                  onClick={() => {
-                    setSelectedCategory(category);
-                    setActivePage("recipes");
-
-                    setTimeout(() => {
-                      scrollToSection("recipes-section");
-                    }, 50);
-                  }}
+                  onClick={() =>
+                    chooseCategory(name)
+                  }
                 >
-                  <span>
-                    {category === "All"
-                      ? "🍽️"
-                      : category === "South Indian"
-                      ? "🥘"
-                      : category === "North Indian"
-                      ? "🍛"
-                      : "🍜"}
-                  </span>
+                  <span>{icon}</span>
 
-                  <span>{category}</span>
+                  <span>{name}</span>
 
-                  <small>{count}</small>
+                  <small>
+                    {counts[name] || 0}
+                  </small>
                 </button>
-              );
-            })}
+              )
+            )}
+
           </div>
+
+          {/* =============================================
+              DIETARY FILTER
+          ============================================= */}
+
+          <div className="dietary-filter">
+
+            <div className="dietary-filter-heading">
+
+              <div>
+                <span className="section-label">
+                  PREFERENCE
+                </span>
+
+                <h3>
+                  Choose Dietary Preference
+                </h3>
+              </div>
+
+              <p>
+                Find recipes that match your
+                food preference.
+              </p>
+
+            </div>
+
+            <div className="dietary-options">
+
+              {dietaryOptions.map(
+                ([option, icon]) => (
+                  <button
+                    key={option}
+                    className={`dietary-option ${
+                      dietaryPreference === option
+                        ? "active"
+                        : ""
+                    }`}
+                    onClick={() =>
+                      chooseDietaryPreference(
+                        option
+                      )
+                    }
+                  >
+
+                    <span className="dietary-option-icon">
+                      {icon}
+                    </span>
+
+                    <span>
+                      {option}
+                    </span>
+
+                    <small>
+                      {dietaryCounts[option] ||
+                        0}
+                    </small>
+
+                  </button>
+                )
+              )}
+
+            </div>
+
+          </div>
+
         </div>
+
       </section>
 
-      {/* ================= RECIPES ================= */}
+      {/* =================================================
+          RECIPES
+      ================================================= */}
+
       <section
         id="recipes-section"
         className="recipes-section"
       >
+
         <div className="section-container">
+
           <div className="section-heading">
+
             <div>
+
               <span className="section-label">
-                {activePage === "favorites"
+                {page === "favorites"
                   ? "YOUR COLLECTION"
                   : "OUR RECIPES"}
               </span>
 
               <h2>
-                {activePage === "favorites"
+                {page === "favorites"
                   ? "Favorite Recipes"
-                  : selectedCategory === "All"
+                  : category === "All"
                   ? "All Recipes"
-                  : selectedCategory}
+                  : category}
               </h2>
+
             </div>
 
             <div className="recipe-total">
-              {filteredRecipes.length}{" "}
-              {filteredRecipes.length === 1
+              {filtered.length}{" "}
+              {filtered.length === 1
                 ? "recipe"
                 : "recipes"}
             </div>
+
           </div>
 
-          {/* Loading */}
-          {loading && (
-            <div className="status-message">
-              <div className="loading-spinner"></div>
-              <p>Loading delicious recipes...</p>
+          {/* =============================================
+              ACTIVE FILTERS
+          ============================================= */}
+
+          {hasActiveFilters && (
+            <div className="active-filters">
+
+              <div className="active-filters-left">
+
+                <span className="active-filters-label">
+                  Showing
+                </span>
+
+                {category !== "All" && (
+                  <span className="active-filter-tag category-tag">
+                    {category}
+                  </span>
+                )}
+
+                {dietaryPreference !== "All" && (
+                  <span
+                    className={`active-filter-tag ${
+                      dietaryPreference ===
+                      "Vegetarian"
+                        ? "vegetarian-filter-tag"
+                        : "non-vegetarian-filter-tag"
+                    }`}
+                  >
+                    {dietaryPreference ===
+                    "Vegetarian"
+                      ? "🥬 Vegetarian"
+                      : "🍗 Non-Vegetarian"}
+                  </span>
+                )}
+
+              </div>
+
+              <button
+                className="clear-filters-button"
+                onClick={clearFilters}
+              >
+                <span>✕</span>
+                Clear filters
+              </button>
+
             </div>
           )}
 
-          {/* Error */}
+          {/* =============================================
+              LOADING
+          ============================================= */}
+
+          {loading && (
+            <div className="status-message">
+
+              <div className="loading-spinner" />
+
+              <p>
+                Loading delicious recipes...
+              </p>
+
+            </div>
+          )}
+
+          {/* =============================================
+              ERROR
+          ============================================= */}
+
           {!loading && error && (
             <div className="status-message error-message">
-              <div className="status-icon">⚠️</div>
-              <h3>Something went wrong</h3>
+
+              <div className="status-icon">
+                ⚠️
+              </div>
+
+              <h3>
+                Something went wrong
+              </h3>
+
               <p>{error}</p>
 
               <button
-                onClick={() => window.location.reload()}
                 className="retry-button"
+                onClick={() =>
+                  window.location.reload()
+                }
               >
                 Try Again
               </button>
+
             </div>
           )}
 
-          {/* No recipes */}
+          {/* =============================================
+              NO RESULTS
+          ============================================= */}
+
           {!loading &&
             !error &&
-            filteredRecipes.length === 0 && (
+            !filtered.length && (
               <div className="status-message">
-                <div className="status-icon">🍽️</div>
 
-                <h3>No recipes found</h3>
+                <div className="status-icon">
+                  🍽️
+                </div>
+
+                <h3>
+                  No recipes found
+                </h3>
 
                 <p>
-                  {activePage === "favorites"
+                  {page === "favorites"
                     ? "You haven't added any recipes to your favorites yet."
-                    : "Try another search or category."}
+                    : "Try another search, category or dietary preference."}
                 </p>
 
-                {activePage === "favorites" && (
+                {hasActiveFilters && (
+                  <button
+                    className="retry-button"
+                    onClick={clearFilters}
+                  >
+                    Clear Filters
+                  </button>
+                )}
+
+                {page === "favorites" && (
                   <button
                     className="retry-button"
                     onClick={() =>
-                      handleNavigation("recipes")
+                      navigate("recipes")
                     }
                   >
                     Explore Recipes
                   </button>
                 )}
+
               </div>
             )}
 
-          {/* Recipe cards */}
+          {/* =============================================
+              RECIPE CARDS
+          ============================================= */}
+
           {!loading &&
             !error &&
-            filteredRecipes.length > 0 && (
+            filtered.length > 0 && (
               <div className="recipe-grid">
-                {filteredRecipes.map((recipe) => {
-                  const ingredients = getIngredients(recipe);
+
+                {filtered.map(recipe => {
+
+                  const list =
+                    ingredients(recipe);
 
                   return (
                     <article
                       className="recipe-card"
-                      key={getRecipeId(recipe)}
+                      key={getId(recipe)}
                     >
+
                       <div className="recipe-card-image">
-                        <RecipeImage recipe={recipe} />
+
+                        <RecipeImage
+                          recipe={recipe}
+                        />
 
                         <button
                           className={`favorite-button ${
@@ -617,7 +931,9 @@ function App() {
                               : ""
                           }`}
                           onClick={() =>
-                            toggleFavorite(recipe)
+                            toggleFavorite(
+                              recipe
+                            )
                           }
                           aria-label={
                             isFavorite(recipe)
@@ -625,7 +941,9 @@ function App() {
                               : "Add to favorites"
                           }
                         >
-                          {isFavorite(recipe) ? "♥" : "♡"}
+                          {isFavorite(recipe)
+                            ? "♥"
+                            : "♡"}
                         </button>
 
                         {recipe.difficulty && (
@@ -633,10 +951,13 @@ function App() {
                             {recipe.difficulty}
                           </span>
                         )}
+
                       </div>
 
                       <div className="recipe-card-content">
+
                         <div className="recipe-card-top">
+
                           <span className="recipe-category">
                             {recipe.category}
                           </span>
@@ -644,14 +965,37 @@ function App() {
                           {recipe.rating && (
                             <span className="recipe-rating">
                               ⭐{" "}
-                              {Number(recipe.rating).toFixed(
-                                1
-                              )}
+                              {Number(
+                                recipe.rating
+                              ).toFixed(1)}
                             </span>
                           )}
+
                         </div>
 
-                        <h3>{recipe.name}</h3>
+                        <h3>
+                          {recipe.name}
+                        </h3>
+
+                        <div className="recipe-tags">
+
+                          {recipe.dietaryPreference && (
+                            <span
+                              className={`dietary-badge ${
+                                recipe.dietaryPreference ===
+                                "Vegetarian"
+                                  ? "vegetarian"
+                                  : "non-vegetarian"
+                              }`}
+                            >
+                              {recipe.dietaryPreference ===
+                              "Vegetarian"
+                                ? "🥬 Vegetarian"
+                                : "🍗 Non-Veg"}
+                            </span>
+                          )}
+
+                        </div>
 
                         {recipe.area && (
                           <p className="recipe-area">
@@ -665,315 +1009,450 @@ function App() {
                         </p>
 
                         <div className="recipe-meta">
+
                           {recipe.cookingTime && (
                             <span>
-                              ⏱️ {recipe.cookingTime} min
+                              ⏱️{" "}
+                              {recipe.cookingTime}{" "}
+                              min
                             </span>
                           )}
 
                           {recipe.serving && (
                             <span>
-                              👥 {recipe.serving}{" "}
-                              {Number(recipe.serving) === 1
+                              👥{" "}
+                              {recipe.serving}{" "}
+                              {Number(
+                                recipe.serving
+                              ) === 1
                                 ? "serving"
                                 : "servings"}
                             </span>
                           )}
 
-                          {ingredients.length > 0 && (
+                          {list.length > 0 && (
                             <span>
-                              🥕 {ingredients.length} ingredients
+                              🥕 {list.length}{" "}
+                              ingredients
                             </span>
                           )}
+
                         </div>
 
                         <button
                           className="view-recipe-button"
                           onClick={() =>
-                            openRecipe(recipe)
+                            setSelected(recipe)
                           }
                         >
                           View Recipe
                           <span>→</span>
                         </button>
+
                       </div>
+
                     </article>
                   );
                 })}
+
               </div>
             )}
+
         </div>
+
       </section>
 
-      {/* ================= RECIPE MODAL ================= */}
-      {selectedRecipe && (
+      {/* =================================================
+          RECIPE MODAL
+      ================================================= */}
+
+      {selected && (
         <div
           className="modal-overlay"
-          onClick={(event) => {
-            if (event.target === event.currentTarget) {
-              closeRecipe();
-            }
-          }}
+          onClick={event =>
+            event.target === event.currentTarget &&
+            setSelected(null)
+          }
         >
+
           <div className="recipe-modal">
+
             <button
               className="modal-close"
-              onClick={closeRecipe}
+              onClick={() =>
+                setSelected(null)
+              }
               aria-label="Close recipe"
             >
               ✕
             </button>
 
             <div className="modal-image">
-              <RecipeImage recipe={selectedRecipe} />
+
+              <RecipeImage
+                recipe={selected}
+              />
+
             </div>
 
             <div className="modal-content">
+
+              {/* HEADER */}
+
               <div className="modal-header">
+
                 <div>
+
                   <span className="recipe-category">
-                    {selectedRecipe.category}
+                    {selected.category}
                   </span>
 
-                  <h2>{selectedRecipe.name}</h2>
+                  <h2>
+                    {selected.name}
+                  </h2>
 
-                  {selectedRecipe.area && (
+                  {selected.area && (
                     <p className="recipe-area">
-                      📍 {selectedRecipe.area}
+                      📍 {selected.area}
                     </p>
                   )}
+
+                  {selected.dietaryPreference && (
+                    <span
+                      className={`dietary-badge modal-dietary-badge ${
+                        selected.dietaryPreference ===
+                        "Vegetarian"
+                          ? "vegetarian"
+                          : "non-vegetarian"
+                      }`}
+                    >
+                      {selected.dietaryPreference ===
+                      "Vegetarian"
+                        ? "🥬 Vegetarian"
+                        : "🍗 Non-Vegetarian"}
+                    </span>
+                  )}
+
                 </div>
 
-                <button
-                  className={`modal-favorite ${
-                    isFavorite(selectedRecipe)
-                      ? "favorited"
-                      : ""
-                  }`}
-                  onClick={() =>
-                    toggleFavorite(selectedRecipe)
-                  }
-                >
-                  {isFavorite(selectedRecipe)
-                    ? "♥ Saved"
-                    : "♡ Save"}
-                </button>
+                <div className="modal-actions">
+
+                  {/* SAVE */}
+
+                  <button
+                    className={`modal-favorite ${
+                      isFavorite(selected)
+                        ? "favorited"
+                        : ""
+                    }`}
+                    onClick={() =>
+                      toggleFavorite(selected)
+                    }
+                  >
+                    {isFavorite(selected)
+                      ? "♥ Saved"
+                      : "♡ Save"}
+                  </button>
+
+                  {/* SHARE */}
+
+                  <button
+                    className="modal-favorite"
+                    onClick={() =>
+                      shareRecipe(selected)
+                    }
+                  >
+                    ↗ Share
+                  </button>
+
+                </div>
+
               </div>
+
+              {/* STATS */}
 
               <div className="modal-stats">
-                {selectedRecipe.rating && (
-                  <div>
-                    <strong>⭐</strong>
-                    <span>
-                      {Number(
-                        selectedRecipe.rating
-                      ).toFixed(1)}
-                    </span>
-                    <small>Rating</small>
-                  </div>
-                )}
 
-                {selectedRecipe.cookingTime && (
-                  <div>
-                    <strong>⏱️</strong>
-                    <span>
-                      {selectedRecipe.cookingTime}
-                    </span>
-                    <small>Minutes</small>
-                  </div>
-                )}
+                {[
+                  [
+                    "⭐",
+                    selected.rating,
+                    "Rating",
+                  ],
+                  [
+                    "⏱️",
+                    selected.cookingTime,
+                    "Minutes",
+                  ],
+                  [
+                    "👥",
+                    selected.serving,
+                    "Servings",
+                  ],
+                  [
+                    "📊",
+                    selected.difficulty,
+                    "Difficulty",
+                  ],
+                ]
+                  .filter(item => item[1])
+                  .map(
+                    ([
+                      icon,
+                      value,
+                      label,
+                    ]) => (
+                      <div key={label}>
 
-                {selectedRecipe.serving && (
-                  <div>
-                    <strong>👥</strong>
-                    <span>
-                      {selectedRecipe.serving}
-                    </span>
-                    <small>Servings</small>
-                  </div>
-                )}
+                        <strong>
+                          {icon}
+                        </strong>
 
-                {selectedRecipe.difficulty && (
-                  <div>
-                    <strong>📊</strong>
-                    <span>
-                      {selectedRecipe.difficulty}
-                    </span>
-                    <small>Difficulty</small>
-                  </div>
-                )}
+                        <span>
+                          {label ===
+                          "Rating"
+                            ? Number(
+                                value
+                              ).toFixed(1)
+                            : value}
+                        </span>
+
+                        <small>
+                          {label}
+                        </small>
+
+                      </div>
+                    )
+                  )}
+
               </div>
 
-              {selectedRecipe.description && (
+              {/* DESCRIPTION */}
+
+              {selected.description && (
                 <div className="modal-description">
-                  <h3>About this Recipe</h3>
-                  <p>{selectedRecipe.description}</p>
+
+                  <h3>
+                    About this Recipe
+                  </h3>
+
+                  <p>
+                    {selected.description}
+                  </p>
+
                 </div>
               )}
 
+              {/* INGREDIENTS */}
+
               <div className="modal-section">
+
                 <h3>
                   <span>🥕</span>
                   Ingredients
                 </h3>
 
                 <div className="ingredients-grid">
-                  {getIngredients(selectedRecipe).map(
-                    (ingredient, index) => (
-                      <div
-                        className="ingredient-item"
-                        key={`${ingredient}-${index}`}
-                      >
-                        <span className="ingredient-check">
-                          ✓
-                        </span>
 
-                        <span>{ingredient}</span>
-                      </div>
-                    )
-                  )}
+                  {ingredients(
+                    selected
+                  ).map((item, index) => (
+                    <div
+                      className="ingredient-item"
+                      key={`${item}-${index}`}
+                    >
+
+                      <span className="ingredient-check">
+                        ✓
+                      </span>
+
+                      <span>
+                        {item}
+                      </span>
+
+                    </div>
+                  ))}
+
                 </div>
+
               </div>
 
+              {/* MAKING PROCESS */}
+
               <div className="modal-section">
+
                 <h3>
                   <span>👨‍🍳</span>
                   Making Process
                 </h3>
 
                 <div className="instructions-list">
-                  {getInstructions(selectedRecipe).map(
-                    (instruction, index) => (
-                      <div
-                        className="instruction-step"
-                        key={`step-${index}`}
-                      >
-                        <div className="step-number">
-                          {index + 1}
-                        </div>
 
-                        <div className="step-content">
-                          <span className="step-title">
-                            Step {index + 1}
-                          </span>
+                  {instructions(
+                    selected
+                  ).map((step, index) => (
+                    <div
+                      className="instruction-step"
+                      key={index}
+                    >
 
-                          <p>{instruction}</p>
-                        </div>
+                      <div className="step-number">
+                        {index + 1}
                       </div>
-                    )
-                  )}
+
+                      <div className="step-content">
+
+                        <span className="step-title">
+                          Step {index + 1}
+                        </span>
+
+                        <p>
+                          {step}
+                        </p>
+
+                      </div>
+
+                    </div>
+                  ))}
+
                 </div>
+
               </div>
 
+              {/* USER RATING */}
+
+              <RecipeRating
+                recipeId={getId(selected)}
+              />
+
+              {/* DONE */}
+
               <div className="modal-footer">
+
                 <button
                   className="modal-done-button"
-                  onClick={closeRecipe}
+                  onClick={() =>
+                    setSelected(null)
+                  }
                 >
                   Done
                 </button>
+
               </div>
+
             </div>
+
           </div>
+
         </div>
       )}
 
-      {/* ================= FOOTER ================= */}
+      {/* =================================================
+          SUBMIT RECIPE
+      ================================================= */}
+
+      {showSubmitRecipe && (
+        <SubmitRecipe
+          onClose={() =>
+            setShowSubmitRecipe(false)
+          }
+          onRecipeAdded={recipe => {
+            setRecipes(oldRecipes => [
+              ...oldRecipes,
+              recipe,
+            ]);
+          }}
+        />
+      )}
+
+      {/* =================================================
+          FOOTER
+      ================================================= */}
+
       <footer className="footer">
+
         <div className="footer-container">
+
           <div className="footer-brand">
+
             <div className="brand">
-              <span className="brand-icon">🍴</span>
-              <span>Food Recipe</span>
+
+              <span className="brand-icon">
+                🍴
+              </span>
+
+              <span>
+                Food Recipe
+              </span>
+
             </div>
 
             <p>
-              Discover delicious recipes and make every
-              meal special.
+              Discover delicious recipes and
+              make every meal special.
             </p>
+
           </div>
 
           <div className="footer-links">
+
             <div>
+
               <h4>Explore</h4>
 
-              <button
-                onClick={() =>
-                  handleNavigation("recipes")
-                }
-              >
-                Recipes
-              </button>
+              {[
+                ["recipes", "Recipes"],
+                ["categories", "Categories"],
+                ["favorites", "Favorites"],
+              ].map(
+                ([id, label]) => (
+                  <button
+                    key={id}
+                    onClick={() =>
+                      navigate(id)
+                    }
+                  >
+                    {label}
+                  </button>
+                )
+              )}
 
-              <button
-                onClick={() =>
-                  handleNavigation("categories")
-                }
-              >
-                Categories
-              </button>
-
-              <button
-                onClick={() =>
-                  handleNavigation("favorites")
-                }
-              >
-                Favorites
-              </button>
             </div>
 
             <div>
+
               <h4>Categories</h4>
 
-              <button
-                onClick={() => {
-                  setSelectedCategory("South Indian");
-                  setActivePage("recipes");
+              {categories
+                .slice(1)
+                .map(([name]) => (
+                  <button
+                    key={name}
+                    onClick={() =>
+                      chooseCategory(name)
+                    }
+                  >
+                    {name}
+                  </button>
+                ))}
 
-                  setTimeout(() => {
-                    scrollToSection("recipes-section");
-                  }, 50);
-                }}
-              >
-                South Indian
-              </button>
-
-              <button
-                onClick={() => {
-                  setSelectedCategory("North Indian");
-                  setActivePage("recipes");
-
-                  setTimeout(() => {
-                    scrollToSection("recipes-section");
-                  }, 50);
-                }}
-              >
-                North Indian
-              </button>
-
-              <button
-                onClick={() => {
-                  setSelectedCategory("Chinese");
-                  setActivePage("recipes");
-
-                  setTimeout(() => {
-                    scrollToSection("recipes-section");
-                  }, 50);
-                }}
-              >
-                Chinese
-              </button>
             </div>
+
           </div>
+
         </div>
 
         <div className="footer-bottom">
+
           <p>
-            © 2026 Food Recipe App. Made with ❤️ for food
-            lovers.
+            © 2026 Food Recipe App. Made with
+            ❤️ for food lovers.
           </p>
+
         </div>
+
       </footer>
+
     </div>
   );
 }
