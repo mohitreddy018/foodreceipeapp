@@ -4,6 +4,9 @@ const mongoose = require("mongoose");
 require("dotenv").config();
 
 const Recipe = require("./models/Recipe");
+const RecipeSubmission = require("./models/RecipeSubmission");
+const authRoutes = require("./auth/authRoutes");
+const { verifyToken, adminOnly } = require("./authMiddleware");
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -11,134 +14,212 @@ const PORT = process.env.PORT || 5000;
 app.use(cors());
 app.use(express.json());
 
+app.use("/api/auth", authRoutes);
+
 mongoose
   .connect(process.env.MONGO_URI)
   .then(() => console.log("MongoDB connected successfully!"))
   .catch(error => console.error("MongoDB connection failed:", error));
 
-
-// ================================
-// HOME
-// ================================
-
 app.get("/", (req, res) => {
-  res.json({
-    message: "Food Recipe API is running!"
-  });
+  res.json({ message: "Food Recipe API is running!" });
 });
 
-
-// ================================
-// GET ALL RECIPES
-// ================================
-
+// Public recipe browsing
 app.get("/api/recipes", async (req, res) => {
   try {
-    const recipes = await Recipe.collection.find({}).toArray();
-
+    const recipes = await Recipe.find().lean();
     res.json(recipes);
   } catch (error) {
-    console.error("Error fetching recipes:", error);
-
-    res.status(500).json({
-      message: "Error fetching recipes",
-      error: error.message
-    });
+    console.error(error);
+    res.status(500).json({ message: "Error fetching recipes." });
   }
 });
-
-
-// ================================
-// GET ONE RECIPE
-// ================================
 
 app.get("/api/recipes/:id", async (req, res) => {
   try {
     const recipe = await Recipe.findById(req.params.id);
-
     if (!recipe) {
-      return res.status(404).json({
-        message: "Recipe not found"
-      });
+      return res.status(404).json({ message: "Recipe not found." });
     }
-
     res.json(recipe);
   } catch (error) {
-    res.status(500).json({
-      message: "Error fetching recipe",
-      error: error.message
+    res.status(400).json({ message: "Invalid recipe ID." });
+  }
+});
+
+// Admin: add a published recipe directly
+app.post("/api/recipes", verifyToken, adminOnly, async (req, res) => {
+  try {
+    const recipe = await Recipe.create(req.body);
+    res.status(201).json({
+      message: "Recipe added successfully!",
+      recipe
+    });
+  } catch (error) {
+    res.status(400).json({
+      message: error.message || "Could not add recipe."
     });
   }
 });
 
+// Admin: edit a published recipe
+app.put("/api/recipes/:id", verifyToken, adminOnly, async (req, res) => {
+  try {
+    const recipe = await Recipe.findByIdAndUpdate(
+      req.params.id,
+      { $set: req.body },
+      { new: true, runValidators: true }
+    );
 
-// ================================
-// ADD NEW RECIPE
-// ================================
+    if (!recipe) {
+      return res.status(404).json({ message: "Recipe not found." });
+    }
 
-app.post("/api/recipes", async (req, res) => {
+    res.json({ message: "Recipe updated successfully!", recipe });
+  } catch (error) {
+    res.status(400).json({ message: "Could not update recipe." });
+  }
+});
+
+// Admin: delete a published recipe
+app.delete("/api/recipes/:id", verifyToken, adminOnly, async (req, res) => {
+  try {
+    const recipe = await Recipe.findByIdAndDelete(req.params.id);
+    if (!recipe) {
+      return res.status(404).json({ message: "Recipe not found." });
+    }
+    res.json({ message: "Recipe deleted successfully!" });
+  } catch (error) {
+    res.status(400).json({ message: "Could not delete recipe." });
+  }
+});
+
+// User: submit a recipe for review
+app.post("/api/submissions", verifyToken, async (req, res) => {
   try {
     const {
-      name,
-      image,
-      imageSource,
-      category,
-      cuisine,
-      area,
-      description,
-      ingredients,
-      instructions,
-      rating,
-      cookingTime,
-      serving,
-      difficulty
+      name, image, imageSource, category, cuisine, area,
+      description, dietaryPreference, ingredients, instructions,
+      cookingTime, serving, difficulty
     } = req.body;
 
-    if (!name || !category || !ingredients || !instructions) {
+    if (
+      !name?.trim() ||
+      !category ||
+      !Array.isArray(ingredients) ||
+      !ingredients.length ||
+      !Array.isArray(instructions) ||
+      !instructions.length
+    ) {
       return res.status(400).json({
-        message:
-          "Name, category, ingredients and instructions are required."
+        message: "Name, category, ingredients and instructions are required."
       });
     }
 
-    const newRecipe = new Recipe({
-      name,
-      image: image || "",
-      imageSource: imageSource || "",
-      category,
-      cuisine: cuisine || "",
-      area: area || "",
-      description: description || "",
-      ingredients,
-      instructions,
-      rating: rating || 0,
-      cookingTime: cookingTime || 0,
-      serving: serving || 1,
-      difficulty: difficulty || "Medium"
+    const submission = await RecipeSubmission.create({
+      name, image, imageSource, category, cuisine, area, description,
+      dietaryPreference, ingredients, instructions, cookingTime,
+      serving, difficulty, submittedBy: req.user._id
     });
-
-    const savedRecipe = await newRecipe.save();
 
     res.status(201).json({
-      message: "Recipe added successfully!",
-      recipe: savedRecipe
+      message: "Recipe submitted successfully for admin review!",
+      submission
     });
-
   } catch (error) {
-    console.error("Error adding recipe:", error);
-
-    res.status(500).json({
-      message: "Error adding recipe",
-      error: error.message
-    });
+    console.error("Submission error:", error);
+    res.status(500).json({ message: "Could not submit recipe." });
   }
 });
 
+// Admin: view pending submissions
+app.get(
+  "/api/submissions",
+  verifyToken,
+  adminOnly,
+  async (req, res) => {
+    try {
+      const submissions = await RecipeSubmission.find({
+        status: "pending"
+      })
+        .populate("submittedBy", "name email")
+        .sort({ createdAt: -1 });
 
-// ================================
-// START SERVER
-// ================================
+      res.json(submissions);
+    } catch (error) {
+      res.status(500).json({ message: "Could not load submissions." });
+    }
+  }
+);
 
-app.listen(PORT, "0.0.0.0", () => {
+// Admin: approve a submission and publish it
+app.patch(
+  "/api/submissions/:id/approve",
+  verifyToken,
+  adminOnly,
+  async (req, res) => {
+    try {
+      const submission = await RecipeSubmission.findOne({
+        _id: req.params.id,
+        status: "pending"
+      });
+
+      if (!submission) {
+        return res.status(404).json({
+          message: "Pending submission not found."
+        });
+      }
+
+      const recipeData = submission.toObject();
+      delete recipeData._id;
+      delete recipeData.__v;
+      delete recipeData.submittedBy;
+      delete recipeData.status;
+      delete recipeData.createdAt;
+      delete recipeData.updatedAt;
+
+      const recipe = await Recipe.create(recipeData);
+      submission.status = "approved";
+      await submission.save();
+
+      res.json({
+        message: "Submission approved and published!",
+        recipe
+      });
+    } catch (error) {
+      console.error("Approval error:", error);
+      res.status(500).json({ message: "Could not approve submission." });
+    }
+  }
+);
+
+// Admin: reject a submission
+app.patch(
+  "/api/submissions/:id/reject",
+  verifyToken,
+  adminOnly,
+  async (req, res) => {
+    try {
+      const submission = await RecipeSubmission.findOneAndUpdate(
+        { _id: req.params.id, status: "pending" },
+        { $set: { status: "rejected" } },
+        { new: true }
+      );
+
+      if (!submission) {
+        return res.status(404).json({
+          message: "Pending submission not found."
+        });
+      }
+
+      res.json({ message: "Submission rejected." });
+    } catch (error) {
+      res.status(400).json({ message: "Could not reject submission." });
+    }
+  }
+);
+
+app.listen(PORT, () => {
   console.log(`Backend running on http://localhost:${PORT}`);
 });
