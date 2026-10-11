@@ -1,84 +1,134 @@
-# 🍴 Food Recipe App
+# 🍽️ Food Recipe App
 
-A full-stack food recipe web application that helps users discover, search, save, share, rate, and submit cooking recipes.
+A full-stack web application that helps users discover, save, share, and submit recipes from South Indian, North Indian, and Chinese cuisines.
 
 ## 📌 Project Overview
 
-The Food Recipe App provides a simple and user-friendly platform for exploring recipes from different cuisines. Users can search recipes, filter them by category and dietary preference, view detailed cooking instructions, save favourite recipes, rate recipes, share recipes, and submit new recipes.
+The Food Recipe App provides a simple platform for browsing recipes, searching by ingredients and cuisine, viewing cooking instructions, and managing favorite dishes. Users can submit new recipes for review, while administrators can manage recipes and approve or reject submissions.
 
 ## ✨ Features
 
-- 🍽️ Browse recipes
-- 🔍 Search recipes by name, ingredients, and cuisine
-- 🥘 Filter by South Indian, North Indian, and Chinese
-- 🥬 Filter by dietary preference
-- ❤️ Save favourite recipes
-- ⭐ Rate recipes
-- 🔗 Share recipes
-- 👨‍🍳 Step-by-step cooking instructions
-- 📝 Submit new recipes
-- 🖼️ Recipe images
-- 📱 Responsive user interface
-- 💾 MongoDB database
+### User Module
+- User signup, login, and logout
+- Browse 60 existing recipes
+- Search recipes by name, ingredients, and cuisine
+- Filter by category and dietary preference
+- View ingredients and step-by-step cooking instructions
+- Save favorite recipes
+- Rate and share recipes
+- Submit recipes for admin review
 
-## 🍛 Recipe Categories
-
-The application contains recipes from:
-
-- South Indian cuisine
-- North Indian cuisine
-- Chinese / Indo-Chinese cuisine
-
-The project includes 60+ recipes with ingredients, cooking instructions, preparation details, cooking time, servings, difficulty, and other information.
+### Admin Module
+- Admin login
+- Dashboard with recipe counts
+- Add new recipes
+- Edit and delete existing recipes
+- View pending recipe submissions
+- Approve or reject submitted recipes
 
 ## 🛠️ Technologies Used
 
-### Frontend
-- React.js
-- Vite
-- HTML
-- CSS
-- JavaScript
+- **Frontend:** React, JavaScript, HTML, CSS
+- **Frontend Tool:** Vite
+- **Backend:** Node.js, Express.js
+- **Database:** MongoDB
+- **ODM:** Mongoose
+- **Authentication:** JSON Web Tokens (JWT), bcryptjs
+- **Version Control:** Git and GitHub
 
-### Backend
-- Node.js
-- Express.js
-
-### Database
-- MongoDB
-- Mongoose
-
-### Development Tools
-- Visual Studio Code
-- Git
-- GitHub
-- MongoDB Compass
-
-## 🏗️ Project Structure
+## 📁 Project Structure
 
 ```text
 foodrecipeapp/
-│
 ├── backend/
+│   ├── auth/
 │   ├── models/
-│   │   └── Recipe.js
 │   ├── server.js
 │   ├── seed.js
-│   ├── updateDietary.js
 │   ├── package.json
 │   └── .env
-│
 ├── frontend/
 │   ├── src/
-│   │   ├── assets/
 │   │   ├── App.jsx
-│   │   ├── App.css
-│   │   ├── index.css
-│   │   ├── main.jsx
-│   │   ├── recipeImages.js
+│   │   ├── Auth.jsx
+│   │   ├── AdminDashboard.jsx
+│   │   ├── SubmitRecipe.jsx
 │   │   ├── RecipeRating.jsx
-│   │   └── SubmitRecipe.jsx
-│   ├── public/
+│   │   └── App.css
 │   └── package.json
-│
-└── .gitignore
+├── .gitignore
+└── README.md
+```
+
+## ⚙️ Setup Instructions
+
+### 1. Clone the repository
+
+```bash
+git clone https://github.com/mohitreddy018/foodrecipeapp.git
+cd foodrecipeapp
+```
+
+### 2. Configure the backend
+
+```bash
+cd backend
+npm install
+```
+
+Create a `.env` file inside the `backend` folder:
+
+```env
+MONGO_URI=your_mongodb_connection_string
+JWT_SECRET=your_long_random_secret
+PORT=5000
+```
+
+Replace the example values with your own private configuration. Never upload `.env` to GitHub.
+
+### 3. Start the backend
+
+```bash
+node server.js
+```
+
+The backend runs at `http://localhost:5000`.
+
+### 4. Start the frontend
+
+Open another terminal at the project root:
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Open the local URL displayed by Vite, usually `http://localhost:5173`.
+
+## 🗄️ Database Setup
+
+Configure MongoDB and use the project's seed script if the recipe data needs to be initialized. Run the seed script only after checking its behavior and confirming that it will not overwrite existing data.
+
+## 🔐 Security
+
+- Keep database credentials and JWT secrets private.
+- Passwords are hashed before storage.
+- Protected backend routes should verify JWT tokens and user roles.
+- Public signup should not allow users to assign themselves the admin role.
+
+## 👥 Project Modules
+
+1. **User Module:** Recipe discovery, favorites, ratings, sharing, and recipe submissions.
+2. **Admin Module:** Recipe management and submission approval.
+
+## 🚀 Future Enhancements
+
+- Deploy the frontend and backend to cloud hosting.
+- Add persistent ratings and user-specific recipe collections.
+- Improve recipe recommendations.
+- Add recipe images and enhanced mobile responsiveness.
+
+## 👨‍💻 Repository
+
+[Food Recipe App on GitHub](https://github.com/mohitreddy018/foodrecipeapp)
